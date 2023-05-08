@@ -4,6 +4,7 @@ import os
 import sys
 import glob
 import logging
+from datetime import datetime
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -35,6 +36,16 @@ from monai.visualize import matshow3d, img2tensorboard
 from monai.utils import first, set_determinism
 from monai.apps import get_logger
 
+# Define run name and paths
+
+save_path = '/data2/etude/micorl/WGAN'
+run_name = datetime.now().strftime("%d-%m-%Y_%H:%M")
+
+logs_path = os.path.join(save_path, 'logs/', run_name)
+
+checkpoint_name = f'checkpoint_{run_name}.pt'
+checkpoint_path = os.path.join(save_path, 'models/', checkpoint_name)
+
 # Determinism, device and logger
 
 print(torch.cuda.is_available())
@@ -61,7 +72,7 @@ batch_size = 1
 
 learning_rate = 1e-4
 channels = 1
-num_epochs = 5
+num_epochs = 250
 latent_size = 100
 critic_features = 16
 generator_features = 16
@@ -71,7 +82,7 @@ lambda_gp = 10 # controls how much of gradient penalty will be added to critic l
 data_dir = '/data1/dose-3d-generative/data_med/PREPARED/FOR_AUG'
 directory = os.path.join(data_dir, 'ct_images')
 images_pattern = os.path.join(directory, '*.nii.gz')
-images = sorted(glob.glob(images_pattern))[:2]
+images = sorted(glob.glob(images_pattern))[:20]
 
 train_transforms = Compose(
     [
@@ -232,12 +243,12 @@ opt_critic = optim.Adam(critic.parameters(), lr=learning_rate, betas=(0.0, 0.9))
 opt_generator = optim.Adam(generator.parameters(), lr=learning_rate, betas=(0.0, 0.9))
 
 # tensorboard writers
-writer_real = SummaryWriter("logs/wgan_gp_med/real")
-writer_fake = SummaryWriter("logs/wgan_gp_med/fake")
-writer_real_gif = SummaryWriter("logs/wgan_gp_med/real_gif")
-writer_fake_gif = SummaryWriter("logs/wgan_gp_med/fake_gif")
-writer_loss_step = SummaryWriter("logs/wgan_gp_med/loss_step")
-writer_loss_epoch = SummaryWriter("logs/wgan_gp_med/loss_epoch")
+writer_real = SummaryWriter(logs_path + '/real')
+writer_fake = SummaryWriter(logs_path + '/fake')
+writer_real_gif = SummaryWriter(logs_path + '/real_gif')
+writer_fake_gif = SummaryWriter(logs_path + '/fake_gif')
+writer_loss_step = SummaryWriter(logs_path + '/loss_step')
+writer_loss_epoch = SummaryWriter(logs_path + '/loss_epoch')
 
 noise = torch.randn(1, latent_size).to(device)
 step = 0
@@ -304,9 +315,6 @@ for epoch in range(num_epochs):
     writer_loss_epoch.add_scalar("Epoch loss Generator", loss_gen_epoch, global_step=epoch)
     writer_loss_epoch.add_scalar("Epoch loss Crit", loss_crit_epoch, global_step=epoch)
 
-torch.save(generator.state_dict(), './generator.pt')
-torch.save(critic.state_dict(), './critic.pt')
-
 noise = torch.randn(1, latent_size).to(device)
 with torch.no_grad():
     fake = generator(noise)
@@ -318,4 +326,17 @@ with torch.no_grad():
             frame_dim=-1,
             cmap="gray")
     fig.savefig('test.png')
+
+# Save models
+
+state = {
+    'epoch': epoch + 1,
+    'step': step,
+    'generator': generator.state_dict(),
+    'critic': critic.state_dict(),
+    'opt_generator': opt_generator.state_dict(),
+    'opt_critic': opt_critic.state_dict(),
+}
+
+torch.save(state, checkpoint_path)
 
