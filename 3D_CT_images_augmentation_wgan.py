@@ -250,6 +250,18 @@ writer_fake_gif = SummaryWriter(logs_path + '/fake_gif')
 writer_loss_step = SummaryWriter(logs_path + '/loss_step')
 writer_loss_epoch = SummaryWriter(logs_path + '/loss_epoch')
 
+def save_model(epoch, step):
+    state = {
+        'epoch': epoch + 1,
+        'step': step,
+        'generator': generator.state_dict(),
+        'critic': critic.state_dict(),
+        'opt_generator': opt_generator.state_dict(),
+        'opt_critic': opt_critic.state_dict(),
+    }
+
+    torch.save(state, checkpoint_path)
+
 noise = torch.randn(1, latent_size).to(device)
 step = 0
 
@@ -309,6 +321,9 @@ for epoch in range(num_epochs):
 
         step += 1
 
+    if epoch % 10 == 0:
+        save_model(epoch, step)
+
     loss_gen_epoch = curr_epoch_loss_gen_sum / len(loader)
     loss_crit_epoch = curr_epoch_loss_crit_sum / len(loader)
     print(f"Generator mean loss in epoch:{loss_gen_epoch}")
@@ -327,16 +342,5 @@ with torch.no_grad():
             cmap="gray")
     fig.savefig('test.png')
 
-# Save models
-
-state = {
-    'epoch': epoch + 1,
-    'step': step,
-    'generator': generator.state_dict(),
-    'critic': critic.state_dict(),
-    'opt_generator': opt_generator.state_dict(),
-    'opt_critic': opt_critic.state_dict(),
-}
-
-torch.save(state, checkpoint_path)
+save_model(epoch, step)
 
