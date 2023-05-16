@@ -1,5 +1,3 @@
-# Imports
-
 import os
 import sys
 import glob
@@ -36,17 +34,8 @@ from monai.visualize import matshow3d, img2tensorboard
 from monai.utils import first, set_determinism
 from monai.apps import get_logger
 
-# Define run name and paths
-
 save_path = '/data2/etude/micorl/WGAN'
-run_name = datetime.now().strftime("%d-%m-%Y_%H:%M")
-
-logs_path = os.path.join(save_path, 'logs/', run_name)
-
-checkpoint_name = f'checkpoint_{run_name}.pt'
-checkpoint_path = os.path.join(save_path, 'models/', checkpoint_name)
-
-# Determinism, device and logger
+run_name = '11-05-2023_14:25'
 
 print(torch.cuda.is_available())
 print(torch.cuda.device_count())
@@ -61,8 +50,6 @@ device = torch.device('cuda:0')
 torch.cuda.empty_cache()
 torch.cuda.memory_stats()
 print(torch.cuda.memory_summary())
-
-# Load and prepare dataset
 
 image_size = 256
 num_slices = 128
@@ -105,7 +92,13 @@ loader = torch.utils.data.DataLoader(dataset, num_workers=10, shuffle=True, pin_
 image_sample = first(loader)
 print(image_sample.shape)
 
-# Define model architecture
+fig = plt.figure(figsize=(15,15))
+matshow3d(volume=image_sample,
+          fig=fig,
+          title="Sample image",
+          every_n=every_n_slice,
+          frame_dim=-1,
+          cmap="gray")
 
 class Critic(nn.Module):
     def __init__(self, channels_img, features_d):
@@ -229,20 +222,31 @@ def test():
 
 test()
 
-# Initialize and train model
+checkpoint_name = f'checkpoint_{run_name}.pt'
+checkpoint_path = os.path.join(save_path, 'models', checkpoint_name)
+
+state = torch.load(checkpoint_path)
 
 # create and initialize networks
+
 critic = Critic(channels, critic_features).to(device)
 initialize_weights(critic)
+critic.load_state_dict(state['critic'])
 
 generator = Generator(latent_size, channels, generator_features).to(device)
 initialize_weights(generator)
+generator.load_state_dict(state['generator'])
 
 # initialize optimizers
-opt_critic = optim.Adam(critic.parameters(), lr=learning_rate, betas=(0.0, 0.9))
-opt_generator = optim.Adam(generator.parameters(), lr=learning_rate, betas=(0.0, 0.9))
 
-# tensorboard writers
+opt_critic = optim.Adam(critic.parameters(), lr=learning_rate, betas=(0.0, 0.9))
+opt_critic.load_state_dict(state['opt_critic'])
+
+opt_generator = optim.Adam(generator.parameters(), lr=learning_rate, betas=(0.0, 0.9))
+opt_generator.load_state_dict(state['opt_generator'])
+
+logs_path = os.path.join(save_path, 'logs/', run_name)
+
 writer_real = SummaryWriter(logs_path + '/real')
 writer_fake = SummaryWriter(logs_path + '/fake')
 writer_real_gif = SummaryWriter(logs_path + '/real_gif')
@@ -263,12 +267,15 @@ def save_model(epoch, step):
     torch.save(state, checkpoint_path)
 
 noise = torch.randn(1, latent_size).to(device)
-step = 0
+step = state['step']
 
 critic.train()
 generator.train()
 
-for epoch in range(num_epochs):
+epoch = state['epoch']
+epochs = epoch + num_epochs
+
+for epoch in range(epoch, epochs):
     curr_epoch_loss_gen_sum = 0
     curr_epoch_loss_crit_sum = 0
     for batch_idx, real in enumerate(loader):
@@ -303,7 +310,7 @@ for epoch in range(num_epochs):
         # Print losses occasionally and print to tensorboard
         if batch_idx % 100 == 0:
             print(
-                f"Epoch [{epoch}/{num_epochs}] Batch {batch_idx}/{len(loader)} \
+                f"Epoch [{epoch}/{epochs}] Batch {batch_idx}/{len(loader)} \
                   Loss D: {loss_critic:.4f}, loss G: {loss_generator:.4f}"
             )
 
@@ -340,7 +347,5 @@ with torch.no_grad():
             every_n=every_n_slice,
             frame_dim=-1,
             cmap="gray")
-    fig.savefig('test.png')
-
+    
 save_model(epoch, step)
-
