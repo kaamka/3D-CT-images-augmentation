@@ -85,7 +85,7 @@ critic_iterations = 5
 lambda_gp = 10 # controls how much of gradient penalty will be added to critic loss
 
 data_dir = '/data1/dose-3d-generative/data_med/PREPARED/FOR_AUG'
-directory = os.path.join(data_dir, 'ct_images')
+directory = os.path.join(data_dir, 'ct_images_raw')
 images_pattern = os.path.join(directory, '*.nii.gz')
 images = sorted(glob.glob(images_pattern))[:20]
 
