@@ -38,8 +38,13 @@ from monai.apps import get_logger
 
 # Define run name and paths
 
+RESUME_TRAINING = True # if set to TRUE provide run_name to continue
+run_name = '19-05-2023_14:01'
+
 save_path = '/data2/etude/micorl/WGAN'
-run_name = datetime.now().strftime("%d-%m-%Y_%H:%M")
+
+if not RESUME_TRAINING:
+    run_name = datetime.now().strftime("%d-%m-%Y_%H:%M")
 
 logs_path = os.path.join(save_path, 'logs/', run_name)
 
@@ -262,8 +267,19 @@ def save_model(epoch, step):
 
     torch.save(state, checkpoint_path)
 
-noise = torch.randn(1, latent_size).to(device)
-step = 0
+# load state if resuming training
+if RESUME_TRAINING:
+    state = torch.load(checkpoint_path)
+    critic.load_state_dict(state['critic'])
+    generator.load_state_dict(state['generator'])
+    opt_critic.load_state_dict(state['opt_critic'])
+    opt_generator.load_state_dict(state['opt_generator'])
+    step = state['step']
+    start_epoch = state['epoch']
+    num_epochs = start_epoch + num_epochs
+else:
+    step = 0
+    start_epoch = 0
 
 critic.train()
 generator.train()
@@ -303,7 +319,7 @@ for epoch in range(num_epochs):
         # Print losses occasionally and print to tensorboard
         if batch_idx % 100 == 0:
             print(
-                f"Epoch [{epoch}/{num_epochs}] Batch {batch_idx}/{len(loader)} \
+                f"Epoch [{epoch+1}/{num_epochs}] Batch {batch_idx}/{len(loader)} \
                   Loss D: {loss_critic:.4f}, loss G: {loss_generator:.4f}"
             )
 
