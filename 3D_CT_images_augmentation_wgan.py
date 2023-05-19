@@ -39,7 +39,7 @@ from monai.apps import get_logger
 # Define run name and paths
 
 RESUME_TRAINING = True # if set to TRUE provide run_name to continue
-run_name = '19-05-2023_14:01'
+run_name = '11-05-2023_14:25'
 
 save_path = '/data2/etude/micorl/WGAN'
 
