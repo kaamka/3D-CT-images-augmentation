@@ -38,8 +38,8 @@ from monai.apps import get_logger
 
 # Define run name and paths
 
-RESUME_TRAINING = True # if set to TRUE provide run_name to continue
-run_name = '19-05-2023_14:01'
+RESUME_TRAINING = False # if set to TRUE provide run_name to continue
+run_name = ''
 
 save_path = '/data2/etude/micorl/WGAN'
 
@@ -284,7 +284,7 @@ else:
 critic.train()
 generator.train()
 
-for epoch in range(num_epochs):
+for epoch in range(start_epoch, num_epochs):
     curr_epoch_loss_gen_sum = 0
     curr_epoch_loss_crit_sum = 0
     for batch_idx, real in enumerate(loader):
