@@ -38,8 +38,8 @@ from monai.apps import get_logger
 
 # Define run name and paths
 
-RESUME_TRAINING = False # if set to TRUE provide run_name to continue
-run_name = ''
+RESUME_TRAINING = True # if set to TRUE provide run_name to continue
+run_name = '23-05-2023_09:42'
 
 save_path = '/data2/etude/micorl/WGAN'
 
@@ -61,7 +61,7 @@ print(torch.cuda.get_device_name(0))
 logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 get_logger('train_log')
 set_determinism(0)
-device = torch.device('cuda:0')
+device = torch.device('cuda:1')
 
 torch.cuda.empty_cache()
 torch.cuda.memory_stats()
@@ -77,11 +77,11 @@ batch_size = 1
 
 learning_rate = 1e-4
 channels = 1
-num_epochs = 200
+num_epochs = 500
 latent_size = 100
 critic_features = 16
 generator_features = 16
-critic_iterations = 5
+critic_iterations = 1
 lambda_gp = 10 # controls how much of gradient penalty will be added to critic loss
 
 data_dir = '/data1/dose-3d-generative/data_med/PREPARED/FOR_AUG'
