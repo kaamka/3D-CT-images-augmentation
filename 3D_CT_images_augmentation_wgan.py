@@ -24,6 +24,7 @@ from monai.transforms import (
     RandRotate,
     RandZoom,
     ScaleIntensity,
+    ScaleIntensityRange,
     EnsureType,
     Transform,
     Resize,
@@ -39,7 +40,7 @@ from monai.apps import get_logger
 # Define run name and paths
 
 RESUME_TRAINING = True # if set to TRUE provide run_name to continue
-run_name = '23-05-2023_09:42'
+run_name = '07-06-2023_19:55'
 
 save_path = '/data2/etude/micorl/WGAN'
 
@@ -77,12 +78,15 @@ batch_size = 1
 
 learning_rate = 1e-4
 channels = 1
-num_epochs = 500
+num_epochs = 50
 latent_size = 100
 critic_features = 16
 generator_features = 16
 critic_iterations = 1
 lambda_gp = 10 # controls how much of gradient penalty will be added to critic loss
+
+win_wid = 400
+win_lev = 60
 
 data_dir = '/data1/dose-3d-generative/data_med/PREPARED/FOR_AUG'
 directory = os.path.join(data_dir, 'ct_images')
@@ -95,8 +99,9 @@ train_transforms = Compose(
         EnsureChannelFirst(),
         CenterSpatialCrop((400, 400, 0)),
         Resize((image_size, image_size, num_slices)),
-        ScaleIntensity(),
-        AdjustContrast(contrast_gamma),
+        # ScaleIntensity(),
+        ScaleIntensityRange(a_min=win_lev-(win_wid/2), a_max=win_lev+(win_wid/2), b_min=0.0, b_max=1.0, clip=True),
+        # AdjustContrast(contrast_gamma),
         RandRotate(range_x=np.pi/12, prob=0.5, keep_size=True),
         RandFlip(spatial_axis=0, prob=0.5),
         RandZoom(min_zoom=0.9, max_zoom=1.1, prob=0.5),
