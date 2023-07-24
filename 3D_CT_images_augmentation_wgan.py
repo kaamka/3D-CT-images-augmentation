@@ -40,17 +40,23 @@ from monai.apps import get_logger
 # Define run name and paths
 
 RESUME_TRAINING = True # if set to TRUE provide run_name to continue
-run_name = '07-06-2023_19:55'
+run_name = '13-06-2023_11:51'
 
+# Due to issues with running training lately, when continuing training save logs and models in temp directory and if 
+# training finished correctly, manually copy them (or automatically at the end of script)
 save_path = '/data2/etude/micorl/WGAN'
 
 if not RESUME_TRAINING:
     run_name = datetime.now().strftime("%d-%m-%Y_%H:%M")
 
+
 logs_path = os.path.join(save_path, 'logs/', run_name)
 
 checkpoint_name = f'checkpoint_{run_name}.pt'
 checkpoint_path = os.path.join(save_path, 'models/', checkpoint_name)
+
+print("logs_path: " + logs_path)
+print("checkpoint_path: " + checkpoint_path)
 
 # Determinism, device and logger
 
@@ -62,11 +68,11 @@ print(torch.cuda.get_device_name(0))
 logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 get_logger('train_log')
 set_determinism(0)
-device = torch.device('cuda:1')
+device = torch.device('cuda:0')
 
 torch.cuda.empty_cache()
 torch.cuda.memory_stats()
-print(torch.cuda.memory_summary())
+# print(torch.cuda.memory_summary())
 
 # Load and prepare dataset
 
@@ -91,7 +97,7 @@ win_lev = 60
 data_dir = '/data1/dose-3d-generative/data_med/PREPARED/FOR_AUG'
 directory = os.path.join(data_dir, 'ct_images')
 images_pattern = os.path.join(directory, '*.nii.gz')
-images = sorted(glob.glob(images_pattern))[:20]
+images = sorted(glob.glob(images_pattern))
 
 train_transforms = Compose(
     [
