@@ -40,7 +40,7 @@ from monai.apps import get_logger
 # Define run name and paths
 
 RESUME_TRAINING = True # if set to TRUE provide run_name to continue
-run_name = '13-06-2023_11:51'
+run_name = '24-07-2023_17:44'
 
 # Due to issues with running training lately, when continuing training save logs and models in temp directory and if 
 # training finished correctly, manually copy them (or automatically at the end of script)
@@ -77,25 +77,22 @@ torch.cuda.memory_stats()
 # Load and prepare dataset
 
 image_size = 256
-num_slices = 128
+num_slices = 26
 contrast_gamma = 1.5
-every_n_slice = 8
-batch_size = 1
+every_n_slice = 1
+batch_size = 8
 
 learning_rate = 1e-4
-channels = 1
 num_epochs = 50
 latent_size = 100
-critic_features = 16
-generator_features = 16
-critic_iterations = 1
+critic_iterations = 3
 lambda_gp = 10 # controls how much of gradient penalty will be added to critic loss
 
 win_wid = 400
 win_lev = 60
 
 data_dir = '/data1/dose-3d-generative/data_med/PREPARED/FOR_AUG'
-directory = os.path.join(data_dir, 'ct_images')
+directory = os.path.join(data_dir, 'ct_images_prostate_only_26fixed')
 images_pattern = os.path.join(directory, '*.nii.gz')
 images = sorted(glob.glob(images_pattern))
 
@@ -116,7 +113,7 @@ train_transforms = Compose(
 )
 
 dataset = CacheDataset(images, train_transforms)
-loader = torch.utils.data.DataLoader(dataset, num_workers=10, shuffle=True, pin_memory=torch.cuda.is_available())
+loader = torch.utils.data.DataLoader(dataset, num_workers=10, shuffle=True, pin_memory=torch.cuda.is_available(), batch_size=batch_size)
 
 image_sample = first(loader)
 print(image_sample.shape)
@@ -124,16 +121,15 @@ print(image_sample.shape)
 # Define model architecture
 
 class Critic(nn.Module):
-    def __init__(self, channels_img, features_d):
+    def __init__(self):
         super(Critic, self).__init__()
         
         self.net = nn.Sequential(
-            self._block(1, 8, 4, 2, 1),
-            self._block(8, 16, 4, 2, 1),
-            self._block(16, 32, 4, 2, 1),
-            self._block(32, 64, 4, 2, 1),
-            self._block(64, 128, 4, 2, 1),
-            self._block(128, 128, 3, (2,2,1), 1),
+            self._block(1, 8, (8,8,3), (2,2,2), (1,1,1)),
+            self._block(8, 16, (8,8,3), (2,2,2), (1,1,1)),
+            self._block(16, 32, (8,8,3), (2,2,2), (1,1,1)),
+            self._block(32, 64, (8,8,3), (2,2,1), (1,1,1)),
+            self._block(64, 128, (8,8,3), (2,2,1), (1,1,1)),
             nn.Conv3d(128, 1, kernel_size=3, stride=1, padding=1),
             nn.Tanh(),
         )
@@ -158,19 +154,19 @@ class Critic(nn.Module):
 
 
 class Generator(nn.Module):
-    def __init__(self, channels_noise, channels_img, features_g):
+    def __init__(self):
         super(Generator, self).__init__()
 
         self.linear = nn.Linear(100, 256*8*8*4)
         self.reshape = Reshape(256, 8, 8, 4)
 
         self.net = nn.Sequential(
-            self._block(256, 128, 4, 2, 1),
-            self._block(128, 64, 4, 2, 1),
-            self._block(64, 32, 4, 2, 1),
-            self._block(32, 16, 4, 2, 1),
-            self._block(16, 8, 4, 2, 1),
-            self._block(8, 1, 3, 1, 1),
+            self._block(256, 128, (6,6,3), (2,2,2), (2,2,1)),
+            self._block(128, 64, (6,6,3), (2,2,2), (2,2,1)),
+            self._block(64, 32, (6,6,3), (2,2,2), (2,2,1)),
+            self._block(32, 16, (6,6,3), (2,2,1), (2,2,1)),
+            self._block(16, 8, (6,6,3), (2,2,1), (2,2,1)),
+            self._block(8, 1, (5,5,4), (1,1,1), (2,2,1)),
             nn.Tanh(),
         )
 
@@ -229,18 +225,14 @@ def gradient_penalty(critic, real, fake, device='cpu'):
     return gradient_penalty
 
 def test():
-    N, in_channels, H, W, D = 1, 1, 256, 256, 128
+    N, in_channels, H, W, D = 1, 1, image_size, image_size, num_slices
     noise_dim = 100
     x = torch.randn((N, in_channels, H, W, D))
-    disc = Critic(in_channels, 8)
-    out_d = disc(x)
-    print(out_d.shape)
+    disc = Critic()
     assert disc(x).shape == (N, 1, 4, 4, 4), "Discriminator test failed"
-    gen = Generator(noise_dim, in_channels, 8)
+    gen = Generator()
     z = torch.randn(1, noise_dim)
-    out_g = gen(z)
-    print(out_g.shape)
-    assert out_g.shape == (N, in_channels, H, W, D), "Generator test failed"
+    assert gen(z).shape == (N, in_channels, H, W, D), "Generator test failed"
     print("Success, tests passed!")
 
 test()
@@ -248,10 +240,10 @@ test()
 # Initialize and train model
 
 # create and initialize networks
-critic = Critic(channels, critic_features).to(device)
+critic = Critic().to(device)
 initialize_weights(critic)
 
-generator = Generator(latent_size, channels, generator_features).to(device)
+generator = Generator().to(device)
 initialize_weights(generator)
 
 # initialize optimizers
