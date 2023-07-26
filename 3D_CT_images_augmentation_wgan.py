@@ -40,7 +40,7 @@ from monai.apps import get_logger
 # Define run name and paths
 
 RESUME_TRAINING = True # if set to TRUE provide run_name to continue
-run_name = '24-07-2023_17:44'
+run_name = '25-07-2023_12:36'
 
 # Due to issues with running training lately, when continuing training save logs and models in temp directory and if 
 # training finished correctly, manually copy them (or automatically at the end of script)
@@ -80,12 +80,12 @@ image_size = 256
 num_slices = 26
 contrast_gamma = 1.5
 every_n_slice = 1
-batch_size = 8
+batch_size = 4
 
 learning_rate = 1e-4
-num_epochs = 50
+num_epochs = 500
 latent_size = 100
-critic_iterations = 3
+critic_iterations = 1
 lambda_gp = 10 # controls how much of gradient penalty will be added to critic loss
 
 win_wid = 400
@@ -125,11 +125,12 @@ class Critic(nn.Module):
         super(Critic, self).__init__()
         
         self.net = nn.Sequential(
-            self._block(1, 8, (8,8,3), (2,2,2), (1,1,1)),
-            self._block(8, 16, (8,8,3), (2,2,2), (1,1,1)),
-            self._block(16, 32, (8,8,3), (2,2,2), (1,1,1)),
-            self._block(32, 64, (8,8,3), (2,2,1), (1,1,1)),
-            self._block(64, 128, (8,8,3), (2,2,1), (1,1,1)),
+            self._block(1, 8, 4, 2, 1),
+            self._block(8, 16, 4, 2, 1),
+            self._block(16, 32, 4, (2,2,1), 1),
+            self._block(32, 64, 4, (2,2,1), 1),
+            self._block(64, 128, (4,4,3), (2,2,1), 1),
+            self._block(128, 128, 3, (2,2,1), 1),
             nn.Conv3d(128, 1, kernel_size=3, stride=1, padding=1),
             nn.Tanh(),
         )
@@ -161,12 +162,12 @@ class Generator(nn.Module):
         self.reshape = Reshape(256, 8, 8, 4)
 
         self.net = nn.Sequential(
-            self._block(256, 128, (6,6,3), (2,2,2), (2,2,1)),
-            self._block(128, 64, (6,6,3), (2,2,2), (2,2,1)),
-            self._block(64, 32, (6,6,3), (2,2,2), (2,2,1)),
-            self._block(32, 16, (6,6,3), (2,2,1), (2,2,1)),
-            self._block(16, 8, (6,6,3), (2,2,1), (2,2,1)),
-            self._block(8, 1, (5,5,4), (1,1,1), (2,2,1)),
+            self._block(256, 128, 4, 2, 1),
+            self._block(128, 64, 4, 2, 1),
+            self._block(64, 32, 4, (2,2,1), (1,1,0)),
+            self._block(32, 16, 4, (2,2,1), (1,1,0)),
+            self._block(16, 8, (4,4,3), (2,2,1), (1,1,0)),
+            self._block(8, 1, 3, 1, (1,1,0)),
             nn.Tanh(),
         )
 
