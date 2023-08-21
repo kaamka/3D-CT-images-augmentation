@@ -40,7 +40,7 @@ from monai.apps import get_logger
 # Define run name and paths
 
 RESUME_TRAINING = True # if set to TRUE provide run_name to continue
-run_name = '31-07-2023_11:31'
+run_name = '16-08-2023_08:58'
 
 # Due to issues with running training lately, when continuing training save logs and models in temp directory and if 
 # training finished correctly, manually copy them (or automatically at the end of script)
@@ -79,7 +79,7 @@ torch.cuda.memory_stats()
 image_size = 256
 num_slices = 26
 every_n_slice = 1
-batch_size = 4
+batch_size = 1
 
 learning_rate = 1e-4
 num_epochs = 500
@@ -126,8 +126,8 @@ class Critic(nn.Module):
             self._block(8, 16, 4, 2, 1),
             self._block(16, 32, 4, (2,2,1), 1),
             self._block(32, 64, 4, (2,2,1), 1),
-            self._block(64, 128, (4,4,3), (2,2,1), 1, True),
-            self._block(128, 128, 3, (2,2,1), 1, True),
+            self._block(64, 128, (4,4,3), (2,2,1), 1),
+            self._block(128, 128, 3, (2,2,1), 1),
             nn.Conv3d(128, 1, kernel_size=3, stride=1, padding=1),
             nn.Tanh(),
         )
@@ -144,8 +144,7 @@ class Critic(nn.Module):
                     bias=False,
                 ),
                 nn.BatchNorm3d(out_channels),
-                nn.LeakyReLU(0.2),
-                nn.Dropout(0.15),
+                nn.Dropout(0.1),
             )
         else:
             return nn.Sequential(
@@ -196,7 +195,7 @@ class Generator(nn.Module):
                 ),
                 nn.BatchNorm3d(out_channels),
                 nn.ReLU(),
-                nn.Dropout(0.15)
+                nn.Dropout(0.1)
             )
         else:
             return nn.Sequential(
