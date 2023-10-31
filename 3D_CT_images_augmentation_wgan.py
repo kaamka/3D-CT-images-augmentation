@@ -78,8 +78,9 @@ torch.cuda.memory_stats()
 
 image_size = 256
 num_slices = 26
+contrast_gamma = 1.5
 every_n_slice = 1
-batch_size = 1
+batch_size = 4
 
 learning_rate = 1e-4
 num_epochs = 500
@@ -101,7 +102,9 @@ train_transforms = Compose(
         EnsureChannelFirst(),
         CenterSpatialCrop((400, 400, 0)),
         Resize((image_size, image_size, num_slices)),
+        # ScaleIntensity(),
         ScaleIntensityRange(a_min=win_lev-(win_wid/2), a_max=win_lev+(win_wid/2), b_min=0.0, b_max=1.0, clip=True),
+        # AdjustContrast(contrast_gamma),
         RandRotate(range_x=np.pi/12, prob=0.5, keep_size=True),
         RandFlip(spatial_axis=0, prob=0.5),
         RandZoom(min_zoom=0.9, max_zoom=1.1, prob=0.5),
@@ -132,33 +135,19 @@ class Critic(nn.Module):
             nn.Tanh(),
         )
 
-    def _block(self, in_channels, out_channels, kernel_size, stride, padding, add_droput=False):
-        if add_droput:
-            return nn.Sequential(
-                nn.Conv3d(
-                    in_channels,
-                    out_channels,
-                    kernel_size,
-                    stride,
-                    padding,
-                    bias=False,
-                ),
-                nn.BatchNorm3d(out_channels),
-                nn.Dropout(0.1),
-            )
-        else:
-            return nn.Sequential(
-                nn.Conv3d(
-                    in_channels,
-                    out_channels,
-                    kernel_size,
-                    stride,
-                    padding,
-                    bias=False,
-                ),
-                nn.BatchNorm3d(out_channels),
-                nn.LeakyReLU(0.2),
-            )
+    def _block(self, in_channels, out_channels, kernel_size, stride, padding):
+        return nn.Sequential(
+            nn.Conv3d(
+                in_channels,
+                out_channels,
+                kernel_size,
+                stride,
+                padding,
+                bias=False,
+            ),
+            nn.BatchNorm3d(out_channels),
+            nn.LeakyReLU(0.2),
+        )
 
     def forward(self, x):
         x = self.net(x)
@@ -177,39 +166,24 @@ class Generator(nn.Module):
             self._block(128, 64, 4, 2, 1),
             self._block(64, 32, 4, (2,2,1), (1,1,0)),
             self._block(32, 16, 4, (2,2,1), (1,1,0)),
-            self._block(16, 8, (4,4,3), (2,2,1), (1,1,0), True),
-            self._block(8, 1, 3, 1, (1,1,0), True),
+            self._block(16, 8, (4,4,3), (2,2,1), (1,1,0)),
+            self._block(8, 1, 3, 1, (1,1,0)),
             nn.Tanh(),
         )
 
-    def _block(self, in_channels, out_channels, kernel_size, stride, padding, add_droput=False):
-        if add_droput:
-            return nn.Sequential(
-                nn.ConvTranspose3d(
-                    in_channels,
-                    out_channels,
-                    kernel_size,
-                    stride,
-                    padding,
-                    bias=False,
-                ),
-                nn.BatchNorm3d(out_channels),
-                nn.ReLU(),
-                nn.Dropout(0.1)
-            )
-        else:
-            return nn.Sequential(
-                nn.ConvTranspose3d(
-                    in_channels,
-                    out_channels,
-                    kernel_size,
-                    stride,
-                    padding,
-                    bias=False,
-                ),
-                nn.BatchNorm3d(out_channels),
-                nn.ReLU(),
-            )
+    def _block(self, in_channels, out_channels, kernel_size, stride, padding):
+        return nn.Sequential(
+            nn.ConvTranspose3d(
+                in_channels,
+                out_channels,
+                kernel_size,
+                stride,
+                padding,
+                bias=False,
+            ),
+            nn.BatchNorm3d(out_channels),
+            nn.ReLU(),
+        )
 
     def forward(self, x):
         x = self.linear(x)
@@ -389,4 +363,3 @@ with torch.no_grad():
     fig.savefig('test.png')
 
 save_model(epoch, step)
-
