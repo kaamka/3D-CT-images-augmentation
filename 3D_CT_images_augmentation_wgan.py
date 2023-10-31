@@ -40,7 +40,7 @@ from monai.apps import get_logger
 # Define run name and paths
 
 RESUME_TRAINING = True # if set to TRUE provide run_name to continue
-run_name = '16-08-2023_08:58'
+run_name = '30-10-2023_15:45'
 
 # Due to issues with running training lately, when continuing training save logs and models in temp directory and if 
 # training finished correctly, manually copy them (or automatically at the end of script)
