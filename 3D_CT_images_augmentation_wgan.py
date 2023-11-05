@@ -39,8 +39,8 @@ from monai.apps import get_logger
 
 # Define run name and paths
 
-RESUME_TRAINING = True # if set to TRUE provide run_name to continue
-run_name = '30-10-2023_15:45'
+RESUME_TRAINING = False # if set to TRUE provide run_name to continue
+run_name = ''
 
 # Due to issues with running training lately, when continuing training save logs and models in temp directory and if 
 # training finished correctly, manually copy them (or automatically at the end of script)
@@ -80,13 +80,15 @@ image_size = 256
 num_slices = 26
 contrast_gamma = 1.5
 every_n_slice = 1
-batch_size = 4
+batch_size = 2
 
 learning_rate = 1e-4
-num_epochs = 500
+num_epochs_list = [250, 250, 1000]
 latent_size = 100
-critic_iterations = 1
+critic_iterations_list = [5, 3, 1]
 lambda_gp = 10 # controls how much of gradient penalty will be added to critic loss
+
+assert len(num_epochs_list) == len(critic_iterations_list)
 
 win_wid = 400
 win_lev = 60
@@ -280,75 +282,82 @@ if RESUME_TRAINING:
     opt_generator.load_state_dict(state['opt_generator'])
     step = state['step']
     start_epoch = state['epoch']
-    num_epochs = start_epoch + num_epochs
+    end_epoch = start_epoch + num_epochs_list[0]
+    all_epochs = start_epoch + sum(num_epochs_list)
 else:
     step = 0
     start_epoch = 0
+    all_epochs = sum(num_epochs_list)
 
 critic.train()
 generator.train()
 
-for epoch in range(start_epoch, num_epochs):
-    curr_epoch_loss_gen_sum = 0
-    curr_epoch_loss_crit_sum = 0
-    for batch_idx, real in enumerate(loader):
-        real = real.to(device)
-        cur_batch_size = real.shape[0]
+for num_epochs, critic_iterations in zip(num_epochs_list, critic_iterations_list):
+    end_epoch = start_epoch + num_epochs
+    print(f'num_epochs = {num_epochs}, critic_iterations = {critic_iterations}, start_epoch = {start_epoch}, end_epoch = {end_epoch}')
+    for epoch in range(start_epoch, end_epoch):
+        curr_epoch_loss_gen_sum = 0
+        curr_epoch_loss_crit_sum = 0
+        for batch_idx, real in enumerate(loader):
+            real = real.to(device)
+            cur_batch_size = real.shape[0]
 
-        # Train Critic: max E[critic(real)] - E[critic(fake)]
-        # equivalent to minimizing the negative of that
-        for _ in range(critic_iterations):
-            noise = torch.randn(cur_batch_size, latent_size).to(device)
-            fake = generator(noise)
-            critic_real = critic(real).reshape(-1)
-            critic_fake = critic(fake).reshape(-1)
-            gp = gradient_penalty(critic, real, fake, device=device)
-            loss_critic = (
-                -(torch.mean(critic_real) - torch.mean(critic_fake)) + lambda_gp * gp
-            )
-            critic.zero_grad()
-            loss_critic.backward(retain_graph=True)
-            opt_critic.step()
-
-        # Train Generator: max E[critic(gen_fake)] <-> min -E[critic(gen_fake)]
-        generator_fake = critic(fake).reshape(-1)
-        loss_generator = -torch.mean(generator_fake)
-        generator.zero_grad()
-        loss_generator.backward()
-        opt_generator.step()
-        writer_loss_step.add_scalar("Step loss Generator", loss_generator, global_step=step)
-        writer_loss_step.add_scalar("Step loss Crit", loss_critic, global_step=step)
-        curr_epoch_loss_gen_sum += loss_generator.item()
-        curr_epoch_loss_crit_sum += loss_critic.item()
-        # Print losses occasionally and print to tensorboard
-        if batch_idx % 100 == 0:
-            print(
-                f"Epoch [{epoch+1}/{num_epochs}] Batch {batch_idx}/{len(loader)} \
-                  Loss D: {loss_critic:.4f}, loss G: {loss_generator:.4f}"
-            )
-
-            with torch.no_grad():
+            # Train Critic: max E[critic(real)] - E[critic(fake)]
+            # equivalent to minimizing the negative of that
+            for _ in range(critic_iterations):
+                noise = torch.randn(cur_batch_size, latent_size).to(device)
                 fake = generator(noise)
-                fig_real = plt.figure(figsize=(15,15))
-                matshow3d(volume=real, fig=fig_real, title="real", every_n=2, frame_dim=-1, cmap="gray")
-                fig_fake = plt.figure(figsize=(15,15))
-                matshow3d(volume=fake, fig=fig_fake, title="fake", every_n=2, frame_dim=-1, cmap="gray")
-                img2tensorboard.plot_2d_or_3d_image(data=real, step=step, writer=writer_real_gif, frame_dim=-1)
-                img2tensorboard.plot_2d_or_3d_image(data=fake, step=step, writer=writer_fake_gif, frame_dim=-1)
-                
-                writer_real.add_figure("Real", fig_real, global_step=step)
-                writer_fake.add_figure("Fake", fig_fake, global_step=step)
+                critic_real = critic(real).reshape(-1)
+                critic_fake = critic(fake).reshape(-1)
+                gp = gradient_penalty(critic, real, fake, device=device)
+                loss_critic = (
+                    -(torch.mean(critic_real) - torch.mean(critic_fake)) + lambda_gp * gp
+                )
+                critic.zero_grad()
+                loss_critic.backward(retain_graph=True)
+                opt_critic.step()
 
-        step += 1
+            # Train Generator: max E[critic(gen_fake)] <-> min -E[critic(gen_fake)]
+            generator_fake = critic(fake).reshape(-1)
+            loss_generator = -torch.mean(generator_fake)
+            generator.zero_grad()
+            loss_generator.backward()
+            opt_generator.step()
+            writer_loss_step.add_scalar("Step loss Generator", loss_generator, global_step=step)
+            writer_loss_step.add_scalar("Step loss Crit", loss_critic, global_step=step)
+            curr_epoch_loss_gen_sum += loss_generator.item()
+            curr_epoch_loss_crit_sum += loss_critic.item()
+            # Print losses occasionally and print to tensorboard
+            if batch_idx % 100 == 0:
+                print(
+                    f"Epoch [{epoch+1}/{all_epochs}] Batch {batch_idx}/{len(loader)} \
+                    Loss D: {loss_critic:.4f}, loss G: {loss_generator:.4f}"
+                )
 
-    if epoch % 10 == 0:
-        save_model(epoch, step)
+                with torch.no_grad():
+                    fake = generator(noise)
+                    fig_real = plt.figure(figsize=(15,15))
+                    matshow3d(volume=real, fig=fig_real, title="real", every_n=2, frame_dim=-1, cmap="gray")
+                    fig_fake = plt.figure(figsize=(15,15))
+                    matshow3d(volume=fake, fig=fig_fake, title="fake", every_n=2, frame_dim=-1, cmap="gray")
+                    img2tensorboard.plot_2d_or_3d_image(data=real, step=step, writer=writer_real_gif, frame_dim=-1)
+                    img2tensorboard.plot_2d_or_3d_image(data=fake, step=step, writer=writer_fake_gif, frame_dim=-1)
+                    
+                    writer_real.add_figure("Real", fig_real, global_step=step)
+                    writer_fake.add_figure("Fake", fig_fake, global_step=step)
 
-    loss_gen_epoch = curr_epoch_loss_gen_sum / len(loader)
-    loss_crit_epoch = curr_epoch_loss_crit_sum / len(loader)
-    print(f"Generator mean loss in epoch:{loss_gen_epoch}")
-    writer_loss_epoch.add_scalar("Epoch loss Generator", loss_gen_epoch, global_step=epoch)
-    writer_loss_epoch.add_scalar("Epoch loss Crit", loss_crit_epoch, global_step=epoch)
+            step += 1
+
+        if epoch % 10 == 0:
+            save_model(epoch, step)
+
+        loss_gen_epoch = curr_epoch_loss_gen_sum / len(loader)
+        loss_crit_epoch = curr_epoch_loss_crit_sum / len(loader)
+        print(f"Generator mean loss in epoch:{loss_gen_epoch}")
+        writer_loss_epoch.add_scalar("Epoch loss Generator", loss_gen_epoch, global_step=epoch)
+        writer_loss_epoch.add_scalar("Epoch loss Crit", loss_crit_epoch, global_step=epoch)
+    
+    start_epoch = end_epoch
 
 noise = torch.randn(1, latent_size).to(device)
 with torch.no_grad():
