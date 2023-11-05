@@ -80,7 +80,7 @@ image_size = 256
 num_slices = 26
 contrast_gamma = 1.5
 every_n_slice = 1
-batch_size = 2
+batch_size = 8
 
 learning_rate = 1e-4
 num_epochs_list = [250, 250, 1000]
