@@ -83,7 +83,7 @@ every_n_slice = 1
 batch_size = 8
 
 learning_rate = 1e-4
-num_epochs_list = [250, 250, 1000]
+num_epochs_list = [250, 250, 1500]
 latent_size = 100
 critic_iterations_list = [5, 3, 1]
 lambda_gp = 10 # controls how much of gradient penalty will be added to critic loss
