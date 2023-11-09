@@ -39,8 +39,8 @@ from monai.apps import get_logger
 
 # Define run name and paths
 
-RESUME_TRAINING = False # if set to TRUE provide run_name to continue
-run_name = ''
+RESUME_TRAINING = True # if set to TRUE provide run_name to continue
+run_name = '07-11-2023_09:40'
 
 # Due to issues with running training lately, when continuing training save logs and models in temp directory and if 
 # training finished correctly, manually copy them (or automatically at the end of script)
@@ -80,12 +80,12 @@ image_size = 256
 num_slices = 26
 contrast_gamma = 1.5
 every_n_slice = 1
-batch_size = 8
+batch_size = 4
 
-learning_rate = 1e-4
-num_epochs_list = [250, 250, 1500]
+learning_rate = 5e-5
+num_epochs_list = [1000]
 latent_size = 100
-critic_iterations_list = [5, 3, 1]
+critic_iterations_list = [1]
 lambda_gp = 10 # controls how much of gradient penalty will be added to critic loss
 
 assert len(num_epochs_list) == len(critic_iterations_list)
