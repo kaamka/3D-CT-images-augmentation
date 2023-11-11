@@ -6,5 +6,5 @@ If you want to run training script for the first time, set RESUME_TRAINING flag 
 If you want to continue training, set RESUME_TRAINING to True and set run_name to the name of the folder with model's state
 
 # Launching tensorboard
-tensorboard --port=8009 --logdir=$WGAN_SAVE_PATH/logs/07-11-2023_09:40
+tensorboard --port=8009 --logdir=$WGAN_SAVE_PATH/logs/09-11-2023_19:44
 
