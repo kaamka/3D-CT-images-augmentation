@@ -32,15 +32,15 @@ from monai.transforms import (
     AdjustContrast
 )
 
-from monai.data import CacheDataset, DataLoader
+from monai.data import CacheDataset, DataLoader, MetaTensor
 from monai.visualize import matshow3d, img2tensorboard
 from monai.utils import first, set_determinism
 from monai.apps import get_logger
 
 # Define run name and paths
 
-RESUME_TRAINING = True # if set to TRUE provide run_name to continue
-run_name = '09-11-2023_19:44'
+RESUME_TRAINING = False # if set to TRUE provide run_name to continue
+run_name = ''
 
 # Due to issues with running training lately, when continuing training save logs and models in temp directory and if 
 # training finished correctly, manually copy them (or automatically at the end of script)
@@ -77,21 +77,32 @@ torch.cuda.memory_stats()
 # Load and prepare dataset
 
 image_size = 256
-num_slices = 26
+num_slices = 128
 contrast_gamma = 1.5
 every_n_slice = 1
 batch_size = 4
 
-learning_rate = 1e-5 # continue training with 1e-5
-num_epochs_list = [3000]
+learning_rate = 1e-4 # 1e-5
+num_epochs_list = [250, 250, 1500] # 3000
 latent_size = 100
-critic_iterations_list = [1]
+critic_iterations_list = [5, 3, 1] # 1
 lambda_gp = 10 # controls how much of gradient penalty will be added to critic loss
 
 assert len(num_epochs_list) == len(critic_iterations_list)
 
 win_wid = 400
 win_lev = 60
+
+class ReduceDepth(Transform):
+    def __init__(self, start_slice, end_slice):
+        self.start_slice = start_slice
+        self.end_slice = end_slice
+
+    def __call__(self, data):
+        t = data.get_array()
+        t = t[:, :, :, self.start_slice:self.end_slice+1]
+        data.set_array(t)
+        return data
 
 data_dir = '/data1/dose-3d-generative/data_med/PREPARED/FOR_AUG'
 directory = os.path.join(data_dir, 'ct_images_prostate_only_26fixed')
@@ -104,6 +115,7 @@ train_transforms = Compose(
         EnsureChannelFirst(),
         CenterSpatialCrop((400, 400, 0)),
         Resize((image_size, image_size, num_slices)),
+        ReduceDepth(32, 63),
         # ScaleIntensity(),
         ScaleIntensityRange(a_min=win_lev-(win_wid/2), a_max=win_lev+(win_wid/2), b_min=0.0, b_max=1.0, clip=True),
         # AdjustContrast(contrast_gamma),
@@ -128,12 +140,10 @@ class Critic(nn.Module):
         
         self.net = nn.Sequential(
             self._block(1, 8, 4, 2, 1),
-            self._block(8, 16, 4, 2, 1),
-            self._block(16, 32, 4, (2,2,1), 1),
-            self._block(32, 64, 4, (2,2,1), 1),
-            self._block(64, 128, (4,4,3), (2,2,1), 1),
-            self._block(128, 128, 3, (2,2,1), 1),
-            nn.Conv3d(128, 1, kernel_size=3, stride=1, padding=1),
+            self._block(8, 32, 4, 2, 1),
+            self._block(32, 64, 4, 2, 1),
+            self._block(64, 128, 4, 2, 1),        
+            nn.Conv3d(128, 1, kernel_size=3, stride=(2,2,1), padding=1),
             nn.Tanh(),
         )
 
@@ -166,10 +176,9 @@ class Generator(nn.Module):
         self.net = nn.Sequential(
             self._block(256, 128, 4, 2, 1),
             self._block(128, 64, 4, 2, 1),
-            self._block(64, 32, 4, (2,2,1), (1,1,0)),
-            self._block(32, 16, 4, (2,2,1), (1,1,0)),
-            self._block(16, 8, (4,4,3), (2,2,1), (1,1,0)),
-            self._block(8, 1, 3, 1, (1,1,0)),
+            self._block(64, 32, 4, 2, 1),
+            self._block(32, 16, (4,4,3), (2,2,1), 1),
+            self._block(16, 1, (4,4,3), (2,2,1), 1),
             nn.Tanh(),
         )
 
@@ -228,11 +237,11 @@ def gradient_penalty(critic, real, fake, device='cpu'):
     return gradient_penalty
 
 def test():
-    N, in_channels, H, W, D = 1, 1, image_size, image_size, num_slices
+    N, in_channels, H, W, D = 1, 1, image_size, image_size, 32
     noise_dim = 100
     x = torch.randn((N, in_channels, H, W, D))
     disc = Critic()
-    assert disc(x).shape == (N, 1, 4, 4, 4), "Discriminator test failed"
+    assert disc(x).shape == (N, 1, 8, 8, 2), "Discriminator test failed"
     gen = Generator()
     z = torch.randn(1, noise_dim)
     assert gen(z).shape == (N, in_channels, H, W, D), "Generator test failed"
