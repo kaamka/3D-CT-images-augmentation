@@ -39,8 +39,8 @@ from monai.apps import get_logger
 
 # Define run name and paths
 
-RESUME_TRAINING = False # if set to TRUE provide run_name to continue
-run_name = ''
+RESUME_TRAINING = True # if set to TRUE provide run_name to continue
+run_name = '29-11-2023_18:38'
 
 # Due to issues with running training lately, when continuing training save logs and models in temp directory and if 
 # training finished correctly, manually copy them (or automatically at the end of script)
@@ -77,15 +77,15 @@ torch.cuda.memory_stats()
 # Load and prepare dataset
 
 image_size = 256
-num_slices = 128
+num_slices = 32
 contrast_gamma = 1.5
 every_n_slice = 1
 batch_size = 4
 
-learning_rate = 1e-4 # 1e-5
-num_epochs_list = [250, 250, 1500] # 3000
+learning_rate = 1e-5
+num_epochs_list = [3000]
 latent_size = 100
-critic_iterations_list = [5, 3, 1] # 1
+critic_iterations_list = [1]
 lambda_gp = 10 # controls how much of gradient penalty will be added to critic loss
 
 assert len(num_epochs_list) == len(critic_iterations_list)
@@ -104,8 +104,8 @@ class ReduceDepth(Transform):
         data.set_array(t)
         return data
 
-data_dir = '/data1/dose-3d-generative/data_med/PREPARED/FOR_AUG'
-directory = os.path.join(data_dir, 'ct_images_prostate_only_26fixed')
+data_dir = '/data1/dose-3d-generative/data_med/PREPARED/FOR_SEG'
+directory = os.path.join(data_dir, 'ct_images_prostate_32fixed')
 images_pattern = os.path.join(directory, '*.nii.gz')
 images = sorted(glob.glob(images_pattern))
 
@@ -115,7 +115,7 @@ train_transforms = Compose(
         EnsureChannelFirst(),
         CenterSpatialCrop((400, 400, 0)),
         Resize((image_size, image_size, num_slices)),
-        ReduceDepth(32, 63),
+        # ReduceDepth(32, 63),
         # ScaleIntensity(),
         ScaleIntensityRange(a_min=win_lev-(win_wid/2), a_max=win_lev+(win_wid/2), b_min=0.0, b_max=1.0, clip=True),
         # AdjustContrast(contrast_gamma),
@@ -131,6 +131,16 @@ loader = torch.utils.data.DataLoader(dataset, num_workers=10, shuffle=True, pin_
 
 image_sample = first(loader)
 print(image_sample.shape)
+
+# with torch.no_grad():
+#     fig = plt.figure(figsize=(15,15))
+#     matshow3d(volume=image_sample[0, 0, :, :, :],
+#             fig=fig,
+#             title="Loaded image",
+#             every_n=every_n_slice,
+#             frame_dim=-1,
+#             cmap="gray")
+#     fig.savefig('test.png')
 
 # Define model architecture
 
@@ -262,6 +272,10 @@ initialize_weights(generator)
 opt_critic = optim.Adam(critic.parameters(), lr=learning_rate, betas=(0.0, 0.9))
 opt_generator = optim.Adam(generator.parameters(), lr=learning_rate, betas=(0.0, 0.9))
 
+# initialize schedulers
+# scheduler_critic = optim.lr_scheduler.LinearLR(opt_critic, start_factor=1.0, end_factor=0.05, total_iters=35000)
+# scheduler_generator = optim.lr_scheduler.LinearLR(opt_generator, start_factor=1.0, end_factor=0.05, total_iters=35000)
+
 # tensorboard writers
 writer_real = SummaryWriter(logs_path + '/real')
 writer_fake = SummaryWriter(logs_path + '/fake')
@@ -332,10 +346,13 @@ for num_epochs, critic_iterations in zip(num_epochs_list, critic_iterations_list
             generator.zero_grad()
             loss_generator.backward()
             opt_generator.step()
+            # scheduler_critic.step()
+            # scheduler_generator.step()
             writer_loss_step.add_scalar("Step loss Generator", loss_generator, global_step=step)
             writer_loss_step.add_scalar("Step loss Crit", loss_critic, global_step=step)
             curr_epoch_loss_gen_sum += loss_generator.item()
             curr_epoch_loss_crit_sum += loss_critic.item()
+
             # Print losses occasionally and print to tensorboard
             if batch_idx % 100 == 0:
                 print(
