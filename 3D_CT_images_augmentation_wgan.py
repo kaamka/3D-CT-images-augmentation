@@ -40,7 +40,7 @@ from monai.apps import get_logger
 # Define run name and paths
 
 RESUME_TRAINING = True # if set to TRUE provide run_name to continue
-run_name = '29-11-2023_18:38'
+run_name = '03-12-2023_13:54'
 
 # Due to issues with running training lately, when continuing training save logs and models in temp directory and if 
 # training finished correctly, manually copy them (or automatically at the end of script)
@@ -83,12 +83,14 @@ every_n_slice = 1
 batch_size = 4
 
 learning_rate = 1e-5
-num_epochs_list = [3000]
+num_epochs_list = [3000] # 250, 250, 1500, 1000, 1000
 latent_size = 100
-critic_iterations_list = [1]
+critic_iterations_list = [1] # 5, 3, 1, 1
+generator_iterations_list = [3] # 1, 1, 1, 3
 lambda_gp = 10 # controls how much of gradient penalty will be added to critic loss
 
 assert len(num_epochs_list) == len(critic_iterations_list)
+assert len(num_epochs_list) == len(generator_iterations_list)
 
 win_wid = 400
 win_lev = 60
@@ -115,10 +117,7 @@ train_transforms = Compose(
         EnsureChannelFirst(),
         CenterSpatialCrop((400, 400, 0)),
         Resize((image_size, image_size, num_slices)),
-        # ReduceDepth(32, 63),
-        # ScaleIntensity(),
         ScaleIntensityRange(a_min=win_lev-(win_wid/2), a_max=win_lev+(win_wid/2), b_min=0.0, b_max=1.0, clip=True),
-        # AdjustContrast(contrast_gamma),
         RandRotate(range_x=np.pi/12, prob=0.5, keep_size=True),
         RandFlip(spatial_axis=0, prob=0.5),
         RandZoom(min_zoom=0.9, max_zoom=1.1, prob=0.5),
@@ -273,6 +272,7 @@ opt_critic = optim.Adam(critic.parameters(), lr=learning_rate, betas=(0.0, 0.9))
 opt_generator = optim.Adam(generator.parameters(), lr=learning_rate, betas=(0.0, 0.9))
 
 # initialize schedulers
+# TODO use stepLR instead
 # scheduler_critic = optim.lr_scheduler.LinearLR(opt_critic, start_factor=1.0, end_factor=0.05, total_iters=35000)
 # scheduler_generator = optim.lr_scheduler.LinearLR(opt_generator, start_factor=1.0, end_factor=0.05, total_iters=35000)
 
@@ -315,9 +315,9 @@ else:
 critic.train()
 generator.train()
 
-for num_epochs, critic_iterations in zip(num_epochs_list, critic_iterations_list):
+for num_epochs, critic_iterations, generator_iterations in zip(num_epochs_list, critic_iterations_list, generator_iterations_list):
     end_epoch = start_epoch + num_epochs
-    print(f'num_epochs = {num_epochs}, critic_iterations = {critic_iterations}, start_epoch = {start_epoch}, end_epoch = {end_epoch}')
+    print(f'num_epochs = {num_epochs}, critic_iterations = {critic_iterations}, generator_iterations = {generator_iterations}, start_epoch = {start_epoch}, end_epoch = {end_epoch}')
     for epoch in range(start_epoch, end_epoch):
         curr_epoch_loss_gen_sum = 0
         curr_epoch_loss_crit_sum = 0
@@ -340,18 +340,22 @@ for num_epochs, critic_iterations in zip(num_epochs_list, critic_iterations_list
                 loss_critic.backward(retain_graph=True)
                 opt_critic.step()
 
-            # Train Generator: max E[critic(gen_fake)] <-> min -E[critic(gen_fake)]
-            generator_fake = critic(fake).reshape(-1)
-            loss_generator = -torch.mean(generator_fake)
-            generator.zero_grad()
-            loss_generator.backward()
-            opt_generator.step()
-            # scheduler_critic.step()
-            # scheduler_generator.step()
-            writer_loss_step.add_scalar("Step loss Generator", loss_generator, global_step=step)
-            writer_loss_step.add_scalar("Step loss Crit", loss_critic, global_step=step)
-            curr_epoch_loss_gen_sum += loss_generator.item()
-            curr_epoch_loss_crit_sum += loss_critic.item()
+
+            for _ in range(generator_iterations):
+            # # Train Generator: max E[critic(gen_fake)] <-> min -E[critic(gen_fake)]
+                generator_fake = critic(fake).reshape(-1)
+                loss_generator = -torch.mean(generator_fake)
+                generator.zero_grad()
+                loss_generator.backward()
+                opt_generator.step()
+                # scheduler_critic.step()
+                # scheduler_generator.step()
+                writer_loss_step.add_scalar("Step loss Generator", loss_generator, global_step=step)
+                writer_loss_step.add_scalar("Step loss Crit", loss_critic, global_step=step)
+                curr_epoch_loss_gen_sum += loss_generator.item()
+                curr_epoch_loss_crit_sum += loss_critic.item()
+                noise = torch.randn(cur_batch_size, latent_size).to(device)
+                fake = generator(noise)
 
             # Print losses occasionally and print to tensorboard
             if batch_idx % 100 == 0:
