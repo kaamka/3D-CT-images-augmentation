@@ -40,7 +40,7 @@ from monai.apps import get_logger
 # Define run name and paths
 
 RESUME_TRAINING = True # if set to TRUE provide run_name to continue
-run_name = '03-12-2023_13:54'
+run_name = '04-12-2023_16:48'
 
 # Due to issues with running training lately, when continuing training save logs and models in temp directory and if 
 # training finished correctly, manually copy them (or automatically at the end of script)
@@ -115,11 +115,11 @@ train_transforms = Compose(
     [
         LoadImage(image_only=True),
         EnsureChannelFirst(),
-        CenterSpatialCrop((400, 400, 0)),
+        CenterSpatialCrop((380, 380, 0)),
         Resize((image_size, image_size, num_slices)),
         ScaleIntensityRange(a_min=win_lev-(win_wid/2), a_max=win_lev+(win_wid/2), b_min=0.0, b_max=1.0, clip=True),
         RandRotate(range_x=np.pi/12, prob=0.5, keep_size=True),
-        RandFlip(spatial_axis=0, prob=0.5),
+        # RandFlip(spatial_axis=0, prob=0.5),
         RandZoom(min_zoom=0.9, max_zoom=1.1, prob=0.5),
         EnsureType()
     ]
