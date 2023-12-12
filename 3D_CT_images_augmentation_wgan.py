@@ -40,7 +40,7 @@ from monai.apps import get_logger
 # Define run name and paths
 
 RESUME_TRAINING = True # if set to TRUE provide run_name to continue
-run_name = '04-12-2023_16:48'
+run_name = '06-12-2023_23:06'
 
 # Due to issues with running training lately, when continuing training save logs and models in temp directory and if 
 # training finished correctly, manually copy them (or automatically at the end of script)
@@ -83,10 +83,10 @@ every_n_slice = 1
 batch_size = 4
 
 learning_rate = 1e-5
-num_epochs_list = [3000] # 250, 250, 1500, 1000, 1000
+num_epochs_list = [1000, 2000] # 250, 250, 1500, 1000, 1000
 latent_size = 100
-critic_iterations_list = [1] # 5, 3, 1, 1
-generator_iterations_list = [3] # 1, 1, 1, 3
+critic_iterations_list = [1, 1] # 5, 3, 1, 1
+generator_iterations_list = [3, 5] # 1, 1, 1, 3
 lambda_gp = 10 # controls how much of gradient penalty will be added to critic loss
 
 assert len(num_epochs_list) == len(critic_iterations_list)
@@ -95,14 +95,14 @@ assert len(num_epochs_list) == len(generator_iterations_list)
 win_wid = 400
 win_lev = 60
 
-class ReduceDepth(Transform):
-    def __init__(self, start_slice, end_slice):
-        self.start_slice = start_slice
-        self.end_slice = end_slice
+class CropBackground(Transform):
+    def __init__(self, first_limit, second_limit):
+        self.first_limit = first_limit
+        self.second_limit = second_limit
 
     def __call__(self, data):
         t = data.get_array()
-        t = t[:, :, :, self.start_slice:self.end_slice+1]
+        t = t[:, self.first_limit:-self.second_limit, :, :]
         data.set_array(t)
         return data
 
@@ -115,12 +115,10 @@ train_transforms = Compose(
     [
         LoadImage(image_only=True),
         EnsureChannelFirst(),
-        CenterSpatialCrop((380, 380, 0)),
+        CenterSpatialCrop((360, 360, 0)),
         Resize((image_size, image_size, num_slices)),
+        CropBackground(32, 32),
         ScaleIntensityRange(a_min=win_lev-(win_wid/2), a_max=win_lev+(win_wid/2), b_min=0.0, b_max=1.0, clip=True),
-        RandRotate(range_x=np.pi/12, prob=0.5, keep_size=True),
-        # RandFlip(spatial_axis=0, prob=0.5),
-        RandZoom(min_zoom=0.9, max_zoom=1.1, prob=0.5),
         EnsureType()
     ]
 )
@@ -131,15 +129,18 @@ loader = torch.utils.data.DataLoader(dataset, num_workers=10, shuffle=True, pin_
 image_sample = first(loader)
 print(image_sample.shape)
 
-# with torch.no_grad():
-#     fig = plt.figure(figsize=(15,15))
-#     matshow3d(volume=image_sample[0, 0, :, :, :],
-#             fig=fig,
-#             title="Loaded image",
-#             every_n=every_n_slice,
-#             frame_dim=-1,
-#             cmap="gray")
-#     fig.savefig('test.png')
+# for batch_idx, real in enumerate(loader):
+#     with torch.no_grad():
+#         fig = plt.figure(figsize=(15,15))
+#         matshow3d(volume=real[0, 0, :, :, :],
+#                 fig=fig,
+#                 title="Loaded image",
+#                 every_n=every_n_slice,
+#                 frame_dim=-1,
+#                 cmap="gray")
+#         fig.savefig(f'test_{batch_idx}.png')
+
+# input()
 
 # Define model architecture
 
@@ -179,8 +180,8 @@ class Generator(nn.Module):
     def __init__(self):
         super(Generator, self).__init__()
 
-        self.linear = nn.Linear(100, 256*8*8*4)
-        self.reshape = Reshape(256, 8, 8, 4)
+        self.linear = nn.Linear(100, 256*6*8*4)
+        self.reshape = Reshape(256, 6, 8, 4)
 
         self.net = nn.Sequential(
             self._block(256, 128, 4, 2, 1),
@@ -246,11 +247,11 @@ def gradient_penalty(critic, real, fake, device='cpu'):
     return gradient_penalty
 
 def test():
-    N, in_channels, H, W, D = 1, 1, image_size, image_size, 32
+    N, in_channels, H, W, D = 1, 1, image_size-64, image_size, 32
     noise_dim = 100
     x = torch.randn((N, in_channels, H, W, D))
     disc = Critic()
-    assert disc(x).shape == (N, 1, 8, 8, 2), "Discriminator test failed"
+    assert disc(x).shape == (N, 1, 6, 8, 2), "Discriminator test failed"
     gen = Generator()
     z = torch.randn(1, noise_dim)
     assert gen(z).shape == (N, in_channels, H, W, D), "Generator test failed"
