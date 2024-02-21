@@ -39,8 +39,8 @@ from monai.apps import get_logger
 
 # Define run name and paths
 
-RESUME_TRAINING = True # if set to TRUE provide run_name to continue
-run_name = '04-12-2023_16:48'
+RESUME_TRAINING = False # if set to TRUE provide run_name to continue
+run_name = ''
 
 # Due to issues with running training lately, when continuing training save logs and models in temp directory and if 
 # training finished correctly, manually copy them (or automatically at the end of script)
@@ -83,10 +83,10 @@ every_n_slice = 1
 batch_size = 4
 
 learning_rate = 1e-5
-num_epochs_list = [3000] # 250, 250, 1500, 1000, 1000
+num_epochs_list = [250, 250, 1500, 3000] # 250, 250, 1500, 1000, 1000
 latent_size = 100
-critic_iterations_list = [1] # 5, 3, 1, 1
-generator_iterations_list = [3] # 1, 1, 1, 3
+critic_iterations_list = [5, 3, 1, 1] # 5, 3, 1, 1
+generator_iterations_list = [1, 1, 1, 3] # 1, 1, 1, 3
 lambda_gp = 10 # controls how much of gradient penalty will be added to critic loss
 
 assert len(num_epochs_list) == len(critic_iterations_list)
@@ -106,8 +106,8 @@ class ReduceDepth(Transform):
         data.set_array(t)
         return data
 
-data_dir = '/data1/dose-3d-generative/data_med/PREPARED/FOR_SEG'
-directory = os.path.join(data_dir, 'ct_images_prostate_32fixed')
+data_dir = '/data1/dose-3d-generative/data_med/PREPARED/data_226/FOR_AUG'
+directory = os.path.join(data_dir, 'ct_images_32')
 images_pattern = os.path.join(directory, '*.nii.gz')
 images = sorted(glob.glob(images_pattern))
 
@@ -118,9 +118,9 @@ train_transforms = Compose(
         CenterSpatialCrop((380, 380, 0)),
         Resize((image_size, image_size, num_slices)),
         ScaleIntensityRange(a_min=win_lev-(win_wid/2), a_max=win_lev+(win_wid/2), b_min=0.0, b_max=1.0, clip=True),
-        RandRotate(range_x=np.pi/12, prob=0.5, keep_size=True),
+        # RandRotate(range_x=np.pi/12, prob=0.5, keep_size=True),
         # RandFlip(spatial_axis=0, prob=0.5),
-        RandZoom(min_zoom=0.9, max_zoom=1.1, prob=0.5),
+        # RandZoom(min_zoom=0.9, max_zoom=1.1, prob=0.5),
         EnsureType()
     ]
 )
