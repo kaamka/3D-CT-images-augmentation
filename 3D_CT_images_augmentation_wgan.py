@@ -39,8 +39,8 @@ from monai.apps import get_logger
 
 # Define run name and paths
 
-RESUME_TRAINING = False # if set to TRUE provide run_name to continue
-run_name = ''
+RESUME_TRAINING = True # if set to TRUE provide run_name to continue
+run_name = '23-04-2024_09:01'
 
 # Due to issues with running training lately, when continuing training save logs and models in temp directory and if 
 # training finished correctly, manually copy them (or automatically at the end of script)
@@ -83,10 +83,10 @@ every_n_slice = 1
 batch_size = 4
 
 learning_rate = 1e-5
-num_epochs_list = [250, 250, 1500, 3000] # 250, 250, 1500, 1000, 1000
+num_epochs_list = [1000] # 250, 250, 1500, 1000
 latent_size = 100
-critic_iterations_list = [5, 3, 1, 1] # 5, 3, 1, 1
-generator_iterations_list = [1, 1, 1, 3] # 1, 1, 1, 3
+critic_iterations_list = [1] # 5, 3, 1, 1
+generator_iterations_list = [3] # 1, 1, 1, 3
 lambda_gp = 10 # controls how much of gradient penalty will be added to critic loss
 
 assert len(num_epochs_list) == len(critic_iterations_list)
@@ -106,8 +106,8 @@ class ReduceDepth(Transform):
         data.set_array(t)
         return data
 
-data_dir = '/data1/dose-3d-generative/data_med/PREPARED/data_226/FOR_AUG'
-directory = os.path.join(data_dir, 'ct_images_32')
+data_dir = '/data1/dose-3d-generative/data_med/PREPARED/data_226/FOR_SEG/'
+directory = os.path.join(data_dir, 'ct_images_prostate_32_dr')
 images_pattern = os.path.join(directory, '*.nii.gz')
 images = sorted(glob.glob(images_pattern))
 
@@ -361,7 +361,7 @@ for num_epochs, critic_iterations, generator_iterations in zip(num_epochs_list, 
             if batch_idx % 100 == 0:
                 print(
                     f"Epoch [{epoch+1}/{all_epochs}] Batch {batch_idx}/{len(loader)} \
-                    Loss D: {loss_critic:.4f}, loss G: {loss_generator:.4f}"
+                    Loss D: {loss_critic.item():.4f}, loss G: {loss_generator.item():.4f}"
                 )
 
                 with torch.no_grad():
@@ -399,6 +399,6 @@ with torch.no_grad():
             every_n=every_n_slice,
             frame_dim=-1,
             cmap="gray")
-    fig.savefig('test.png')
+    fig.savefig('generated.png')
 
 save_model(epoch, step)
