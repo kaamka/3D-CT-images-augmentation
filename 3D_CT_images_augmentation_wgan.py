@@ -106,8 +106,8 @@ class ReduceDepth(Transform):
         data.set_array(t)
         return data
 
-data_dir = '/data1/dose-3d-generative/data_med/PREPARED/data_226/FOR_AUG'
-directory = os.path.join(data_dir, 'ct_images_32')
+data_dir = '/data1/dose-3d-generative/data_med/PREPARED/FOR_SEG'
+directory = os.path.join(data_dir, 'ct_images_prostate_32fixed')
 images_pattern = os.path.join(directory, '*.nii.gz')
 images = sorted(glob.glob(images_pattern))
 
