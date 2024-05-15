@@ -15,43 +15,31 @@ import torch.optim as optim
 from torch.utils.tensorboard import SummaryWriter
 
 from monai.networks.layers import Reshape
-
 from monai.transforms import (
     LoadImage,
     EnsureChannelFirst,
     Compose,
-    RandFlip,
-    RandRotate,
-    RandZoom,
-    ScaleIntensity,
     ScaleIntensityRange,
     EnsureType,
     Transform,
     Resize,
-    CenterSpatialCrop,
-    AdjustContrast
+    CenterSpatialCrop
 )
-
-from monai.data import CacheDataset, DataLoader, MetaTensor
+from monai.data import CacheDataset
 from monai.visualize import matshow3d, img2tensorboard
 from monai.utils import first, set_determinism
 from monai.apps import get_logger
 
 # Define run name and paths
 
-RESUME_TRAINING = False # if set to TRUE provide run_name to continue
+RESUME_TRAINING = False # if TRUE provide run_name to continue
 run_name = ''
 
-# Due to issues with running training lately, when continuing training save logs and models in temp directory and if 
-# training finished correctly, manually copy them (or automatically at the end of script)
-save_path = '/data2/etude/micorl/WGAN'
-
 if not RESUME_TRAINING:
-    run_name = datetime.now().strftime("%d-%m-%Y_%H:%M")
+    run_name = datetime.now().strftime("%d-%m-%Y_%H:%M") # set run_name based on timestamp
 
-
+save_path = '/data2/etude/micorl/WGAN'
 logs_path = os.path.join(save_path, 'logs/', run_name)
-
 checkpoint_name = f'checkpoint_{run_name}.pt'
 checkpoint_path = os.path.join(save_path, 'models/', checkpoint_name)
 
@@ -69,42 +57,29 @@ logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 get_logger('train_log')
 set_determinism(0)
 device = torch.device('cuda:0')
-
 torch.cuda.empty_cache()
 torch.cuda.memory_stats()
-# print(torch.cuda.memory_summary())
 
-# Load and prepare dataset
+# Define training hyperparameters
 
-image_size = 256
-num_slices = 32
-contrast_gamma = 1.5
-every_n_slice = 1
+image_size = 256 # image height and width
+num_slices = 32 # image depth
 batch_size = 4
-
-learning_rate = 1e-5
-num_epochs_list = [250, 250, 1500, 3000] # 250, 250, 1500, 1000, 1000
-latent_size = 100
-critic_iterations_list = [5, 3, 1, 1] # 5, 3, 1, 1
-generator_iterations_list = [1, 1, 1, 3] # 1, 1, 1, 3
 lambda_gp = 10 # controls how much of gradient penalty will be added to critic loss
+learning_rate = 1e-5
+latent_size = 100
+win_wid = 400 # window width for converting to HO scale
+win_lev = 60 # window level for converting to HO scale
+
+# number of epochs and corresponding critic-generator training proportions
+num_epochs_list = [250, 250, 1500, 3000]
+critic_iterations_list = [5, 3, 1, 1]
+generator_iterations_list = [1, 1, 1, 3]
 
 assert len(num_epochs_list) == len(critic_iterations_list)
 assert len(num_epochs_list) == len(generator_iterations_list)
 
-win_wid = 400
-win_lev = 60
-
-class ReduceDepth(Transform):
-    def __init__(self, start_slice, end_slice):
-        self.start_slice = start_slice
-        self.end_slice = end_slice
-
-    def __call__(self, data):
-        t = data.get_array()
-        t = t[:, :, :, self.start_slice:self.end_slice+1]
-        data.set_array(t)
-        return data
+# Load and preprocess data
 
 data_dir = '/data1/dose-3d-generative/data_med/PREPARED/FOR_SEG'
 directory = os.path.join(data_dir, 'ct_images_prostate_32fixed')
@@ -118,9 +93,6 @@ train_transforms = Compose(
         CenterSpatialCrop((380, 380, 0)),
         Resize((image_size, image_size, num_slices)),
         ScaleIntensityRange(a_min=win_lev-(win_wid/2), a_max=win_lev+(win_wid/2), b_min=0.0, b_max=1.0, clip=True),
-        # RandRotate(range_x=np.pi/12, prob=0.5, keep_size=True),
-        # RandFlip(spatial_axis=0, prob=0.5),
-        # RandZoom(min_zoom=0.9, max_zoom=1.1, prob=0.5),
         EnsureType()
     ]
 )
@@ -130,16 +102,6 @@ loader = torch.utils.data.DataLoader(dataset, num_workers=10, shuffle=True, pin_
 
 image_sample = first(loader)
 print(image_sample.shape)
-
-# with torch.no_grad():
-#     fig = plt.figure(figsize=(15,15))
-#     matshow3d(volume=image_sample[0, 0, :, :, :],
-#             fig=fig,
-#             title="Loaded image",
-#             every_n=every_n_slice,
-#             frame_dim=-1,
-#             cmap="gray")
-#     fig.savefig('test.png')
 
 # Define model architecture
 
@@ -225,7 +187,6 @@ def gradient_penalty(critic, real, fake, device='cpu'):
 
     # Calculate critic scores
     mixed_scores = critic(interpolated_images)
-    #print('1 ', mixed_scores.shape)
 
     # Take the gradient of the scores with respect to the images
     gradient = torch.autograd.grad(
@@ -236,11 +197,9 @@ def gradient_penalty(critic, real, fake, device='cpu'):
         retain_graph=True,
     )[0]
     
-    # reshape gradient to vector, calculate norm
+    # reshape gradient to vector, calculate norm and gradient penalty
     gradient = gradient.view(gradient.shape[0], -1)
     gradient_norm = gradient.norm(2, dim=1)
-    
-    # calculate gradient penalty
     gradient_penalty = torch.mean((gradient_norm - 1) ** 2)
 
     return gradient_penalty
@@ -249,13 +208,14 @@ def test():
     N, in_channels, H, W, D = 1, 1, image_size, image_size, 32
     noise_dim = 100
     x = torch.randn((N, in_channels, H, W, D))
-    disc = Critic()
-    assert disc(x).shape == (N, 1, 8, 8, 2), "Discriminator test failed"
-    gen = Generator()
+    c = Critic()
+    assert c(x).shape == (N, 1, 8, 8, 2), "Critic test failed"
+    g = Generator()
     z = torch.randn(1, noise_dim)
-    assert gen(z).shape == (N, in_channels, H, W, D), "Generator test failed"
+    assert g(z).shape == (N, in_channels, H, W, D), "Generator test failed"
     print("Success, tests passed!")
 
+# test if critic and generator produce results in expected shapes
 test()
 
 # Initialize and train model
@@ -271,12 +231,7 @@ initialize_weights(generator)
 opt_critic = optim.Adam(critic.parameters(), lr=learning_rate, betas=(0.0, 0.9))
 opt_generator = optim.Adam(generator.parameters(), lr=learning_rate, betas=(0.0, 0.9))
 
-# initialize schedulers
-# TODO use stepLR instead
-# scheduler_critic = optim.lr_scheduler.LinearLR(opt_critic, start_factor=1.0, end_factor=0.05, total_iters=35000)
-# scheduler_generator = optim.lr_scheduler.LinearLR(opt_generator, start_factor=1.0, end_factor=0.05, total_iters=35000)
-
-# tensorboard writers
+# Prepare tensorboard logging
 writer_real = SummaryWriter(logs_path + '/real')
 writer_fake = SummaryWriter(logs_path + '/fake')
 writer_real_gif = SummaryWriter(logs_path + '/real_gif')
@@ -284,6 +239,7 @@ writer_fake_gif = SummaryWriter(logs_path + '/fake_gif')
 writer_loss_step = SummaryWriter(logs_path + '/loss_step')
 writer_loss_epoch = SummaryWriter(logs_path + '/loss_epoch')
 
+# helper method for saving model
 def save_model(epoch, step):
     state = {
         'epoch': epoch + 1,
@@ -340,16 +296,13 @@ for num_epochs, critic_iterations, generator_iterations in zip(num_epochs_list, 
                 loss_critic.backward(retain_graph=True)
                 opt_critic.step()
 
-
+            # Train Generator: max E[critic(gen_fake)] <-> min -E[critic(gen_fake)]
             for _ in range(generator_iterations):
-            # # Train Generator: max E[critic(gen_fake)] <-> min -E[critic(gen_fake)]
                 generator_fake = critic(fake).reshape(-1)
                 loss_generator = -torch.mean(generator_fake)
                 generator.zero_grad()
                 loss_generator.backward()
                 opt_generator.step()
-                # scheduler_critic.step()
-                # scheduler_generator.step()
                 writer_loss_step.add_scalar("Step loss Generator", loss_generator, global_step=step)
                 writer_loss_step.add_scalar("Step loss Crit", loss_critic, global_step=step)
                 curr_epoch_loss_gen_sum += loss_generator.item()
@@ -357,7 +310,7 @@ for num_epochs, critic_iterations, generator_iterations in zip(num_epochs_list, 
                 noise = torch.randn(cur_batch_size, latent_size).to(device)
                 fake = generator(noise)
 
-            # Print losses occasionally and print to tensorboard
+            # Print losses occasionally and log to tensorboard
             if batch_idx % 100 == 0:
                 print(
                     f"Epoch [{epoch+1}/{all_epochs}] Batch {batch_idx}/{len(loader)} \
@@ -378,6 +331,7 @@ for num_epochs, critic_iterations, generator_iterations in zip(num_epochs_list, 
 
             step += 1
 
+        # save model every 10 epochs (will overwrite previously saved!)
         if epoch % 10 == 0:
             save_model(epoch, step)
 
@@ -389,6 +343,7 @@ for num_epochs, critic_iterations, generator_iterations in zip(num_epochs_list, 
     
     start_epoch = end_epoch
 
+# Generate final image and save model
 noise = torch.randn(1, latent_size).to(device)
 with torch.no_grad():
     fake = generator(noise)
@@ -396,9 +351,9 @@ with torch.no_grad():
     matshow3d(volume=fake,
             fig=fig,
             title="Generated image",
-            every_n=every_n_slice,
+            every_n=1,
             frame_dim=-1,
             cmap="gray")
-    fig.savefig('test.png')
+    fig.savefig('generated_final.png')
 
 save_model(epoch, step)
