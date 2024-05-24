@@ -38,7 +38,7 @@ run_name = ''
 if not RESUME_TRAINING:
     run_name = datetime.now().strftime("%d-%m-%Y_%H:%M") # set run_name based on timestamp
 
-save_path = '/data2/etude/micorl/WGAN'
+save_path = '/ravana/d3d_work/micorl'
 logs_path = os.path.join(save_path, 'logs/', run_name)
 checkpoint_name = f'checkpoint_{run_name}.pt'
 checkpoint_path = os.path.join(save_path, 'models/', checkpoint_name)

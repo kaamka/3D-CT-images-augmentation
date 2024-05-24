@@ -4,6 +4,8 @@ import matplotlib.pyplot as plt
 from monai.networks.layers import Reshape
 from monai.visualize import matshow3d
 
+checkpoint_path = '/data2/etude/micorl/WGAN/models/checkpoint_04-12-2023_16:48.pt'
+
 class Generator(nn.Module):
     def __init__(self):
         super(Generator, self).__init__()
@@ -42,7 +44,7 @@ class Generator(nn.Module):
     
 
 generator = Generator()
-state_dict = torch.load('/data2/etude/micorl/WGAN/models/checkpoint_04-12-2023_16:48.pt')
+state_dict = torch.load(checkpoint_path)
 generator.load_state_dict(state_dict['generator'])
 
 for i in range(10):
