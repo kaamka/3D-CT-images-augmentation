@@ -81,7 +81,7 @@ assert len(num_epochs_list) == len(generator_iterations_list)
 
 # Load and preprocess data
 
-data_dir = '/data1/dose-3d-generative/data_med/PREPARED/FOR_SEG'
+data_dir = '/ravana/d3d_work/micorl/data'
 directory = os.path.join(data_dir, 'ct_images_prostate_32fixed')
 images_pattern = os.path.join(directory, '*.nii.gz')
 images = sorted(glob.glob(images_pattern))
@@ -314,7 +314,7 @@ for num_epochs, critic_iterations, generator_iterations in zip(num_epochs_list, 
             if batch_idx % 100 == 0:
                 print(
                     f"Epoch [{epoch+1}/{all_epochs}] Batch {batch_idx}/{len(loader)} \
-                    Loss D: {loss_critic:.4f}, loss G: {loss_generator:.4f}"
+                    Loss D: {loss_critic.item():.4f}, loss G: {loss_generator.item():.4f}"
                 )
 
                 with torch.no_grad():
