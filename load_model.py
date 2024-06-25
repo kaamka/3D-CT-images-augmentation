@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 from monai.networks.layers import Reshape
 from monai.visualize import matshow3d
 
-checkpoint_path = '/data2/etude/micorl/WGAN/models/checkpoint_04-12-2023_16:48.pt'
+checkpoint_path = "/ravana/d3d_work/kamkal/augm/WGAN/models/checkpoint_04-12-2023_16_48.pt"
 
 class Generator(nn.Module):
     def __init__(self):
@@ -58,4 +58,4 @@ for i in range(10):
                 every_n=1,
                 frame_dim=-1,
                 cmap="gray")
-        plt.savefig(f'generated_{i}.png')
+        plt.savefig(f'generated_{i}.pdf')
